@@ -41,15 +41,16 @@ func batchFn(ctx context.Context, requests []string) []batcher.Response[*Example
 
 func main() {
 	ctx := context.Background()
-	loader := batcher.New[string, *ExampleData](ctx, batchFn, batcher.WithConcurrencyControl[string, *ExampleData](
+	batcher := batcher.New[string, *ExampleData](ctx, batchFn, batcher.WithConcurrencyControl[string, *ExampleData](
 		batcher.NewDefaultConcurrencyControl(100),
 	))
 
-	thunk := loader.Do(ctx, "World")
+	thunk := batcher.Do(ctx, "World")
+	// You can call shutdown to graceful shutdown batcher
+	batcher.Shutdown()
 	val, err := thunk.Await(ctx)
 	fmt.Printf("value: %v, err: %v\n", val, err)
 }
-
 ```
 
 ## TODO
