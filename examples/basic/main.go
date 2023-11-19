@@ -26,8 +26,9 @@ func batchFn(ctx context.Context, requests []string) []batcher.Response[*Example
 
 func main() {
 	ctx := context.Background()
+	cc := batcher.NewDefaultConcurrencyControl(100)
 	batcher := batcher.New[string, *ExampleData](ctx, batchFn, batcher.WithConcurrencyControl[string, *ExampleData](
-		batcher.NewDefaultConcurrencyControl(100),
+		cc,
 	))
 
 	thunk := batcher.Do(ctx, "World")
