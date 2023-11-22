@@ -63,9 +63,23 @@ func (d *defaultConcurrencyControl) release() {
 	}
 }
 
-func NewDefaultConcurrencyControl(concurrency int) BatchConcurrencyControl {
-	return &defaultConcurrencyControl{
+func NewDefaultConcurrencyControl(concurrency int, option ...DefaultConcurrencyControlOption) BatchConcurrencyControl {
+	concurrencyControl := &defaultConcurrencyControl{
 		sem:   make(chan struct{}, concurrency),
-		queue: make(chan chan struct{}, concurrency),
+		queue: make(chan chan struct{}, concurrency*2),
+	}
+
+	for _, opt := range option {
+		opt(concurrencyControl)
+	}
+
+	return concurrencyControl
+}
+
+type DefaultConcurrencyControlOption func(*defaultConcurrencyControl)
+
+func WithDefaultConcurrencyControlQueueSize(size int) DefaultConcurrencyControlOption {
+	return func(d *defaultConcurrencyControl) {
+		d.queue = make(chan chan struct{}, size)
 	}
 }
