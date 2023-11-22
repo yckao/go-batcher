@@ -40,7 +40,7 @@ func (d *defaultConcurrencyControl) Acquire(ctx context.Context) (func(), error)
 	default:
 		select {
 		case d.sem <- struct{}{}:
-			return func() { <-d.sem }, nil
+			return d.release, nil
 		default:
 			releaseChan := make(chan struct{})
 			d.queue <- releaseChan
@@ -48,20 +48,18 @@ func (d *defaultConcurrencyControl) Acquire(ctx context.Context) (func(), error)
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-releaseChan:
-				return func() {
-					<-d.sem
-					d.releaseNext()
-				}, nil
+				return d.release, nil
 			}
 		}
 	}
 }
 
-func (c *defaultConcurrencyControl) releaseNext() {
+func (d *defaultConcurrencyControl) release() {
 	select {
-	case releaseChan := <-c.queue:
+	case releaseChan := <-d.queue:
 		releaseChan <- struct{}{}
 	default:
+		<-d.sem
 	}
 }
 

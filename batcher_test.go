@@ -13,8 +13,11 @@ import (
 )
 
 var _ = Describe("DataLoader", func() {
-	AfterEach(func() {
-		Eventually(Goroutines).ShouldNot(HaveLeaked())
+	BeforeEach(func() {
+		goods := Goroutines()
+		DeferCleanup(func() {
+			Eventually(Goroutines).ShouldNot(HaveLeaked(goods))
+		})
 	})
 
 	It("can batch do request", func() {
