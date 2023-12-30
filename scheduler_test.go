@@ -8,18 +8,39 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gleak"
-	"github.com/yckao/go-batcher/internal/mock"
 )
+
+var _ = Describe("SchedulerCallback", func() {
+	var (
+		callback SchedulerCallback
+
+		called bool
+	)
+
+	BeforeEach(func() {
+		callback = NewSchedulerCallback(func() {
+			called = true
+		})
+	})
+
+	JustBeforeEach(func() {
+		callback.Call()
+	})
+
+	It("should call callback", func() {
+		Expect(called).To(BeTrue())
+	})
+})
 
 var _ = Describe("TimeWindowScheduler", func() {
 	var (
 		ctx        context.Context
 		cancelFunc context.CancelFunc
 
-		mockClock    *mock.MockClock
-		mockTimer    *mock.MockTimer
-		mockBatch    *mock.MockBatch
-		mockCallback *mock.MockCallback
+		mockClock    *MockClock
+		mockTimer    *MockTimer
+		mockBatch    *MockBatch
+		mockCallback *MockSchedulerCallback
 
 		timeTrigger     chan time.Time
 		dispatchTrigger chan struct{}
@@ -38,20 +59,20 @@ var _ = Describe("TimeWindowScheduler", func() {
 	BeforeEach(func() {
 		ctx, cancelFunc = context.WithCancel(context.TODO())
 
-		mockClock = mock.NewMockClock(ctrl)
+		mockClock = NewMockClock(ctrl)
 		scheduler = &TimeWindowScheduler{
 			clock:      mockClock,
 			timeWindow: time.Duration(gofakeit.Second()),
 		}
 
-		mockCallback = mock.NewMockCallback(ctrl)
+		mockCallback = NewMockSchedulerCallback(ctrl)
 
-		mockTimer = mock.NewMockTimer(ctrl)
+		mockTimer = NewMockTimer(ctrl)
 		timeTrigger = make(chan time.Time)
 		mockTimer.EXPECT().C().Return(timeTrigger)
 		mockTimer.EXPECT().Stop()
 
-		mockBatch = mock.NewMockBatch(ctrl)
+		mockBatch = NewMockBatch(ctrl)
 		dispatchTrigger = make(chan struct{})
 		fullTrigger = make(chan struct{})
 		mockBatch.EXPECT().Dispatch().Return(dispatchTrigger)
@@ -100,8 +121,8 @@ var _ = Describe("InstantScheduler", func() {
 		ctx        context.Context
 		cancelFunc context.CancelFunc
 
-		mockBatch    *mock.MockBatch
-		mockCallback *mock.MockCallback
+		mockBatch    *MockBatch
+		mockCallback *MockSchedulerCallback
 
 		scheduler *InstantScheduler
 	)
@@ -110,8 +131,8 @@ var _ = Describe("InstantScheduler", func() {
 		ctx, cancelFunc = context.WithCancel(context.TODO())
 		scheduler = &InstantScheduler{}
 
-		mockCallback = mock.NewMockCallback(ctrl)
-		mockBatch = mock.NewMockBatch(ctrl)
+		mockCallback = NewMockSchedulerCallback(ctrl)
+		mockBatch = NewMockBatch(ctrl)
 	})
 
 	AfterEach(func() {

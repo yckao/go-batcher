@@ -33,13 +33,13 @@ func (c *concurrencyToken) Release() {
 	}
 }
 
-type UnlimitedConcurrencyControl struct{}
+type unlimitedConcurrencyControl struct{}
 
 func NewUnlimitedConcurrencyControl() ConcurrencyControl {
-	return &UnlimitedConcurrencyControl{}
+	return &unlimitedConcurrencyControl{}
 }
 
-func (u UnlimitedConcurrencyControl) Acquire(ctx context.Context) (ConcurrencyToken, error) {
+func (u unlimitedConcurrencyControl) Acquire(ctx context.Context) (ConcurrencyToken, error) {
 	return NewConcurrencyToken(func() {}), nil
 }
 

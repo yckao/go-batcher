@@ -1,11 +1,11 @@
 package batcher
 
 import (
+	"github.com/brianvoe/gofakeit/v6"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"context"
-	"reflect"
 )
 
 type testConcurrencyControl struct{}
@@ -13,25 +13,56 @@ type testConcurrencyControl struct{}
 func (c *testConcurrencyControl) Acquire(ctx context.Context) (func(), error) { return func() {}, nil }
 
 var _ = Describe("Option", func() {
-	It("can set max batch size", func() {
-		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithMaxBatchSize[string, string](10))
-		Expect(dl.(*batcher[string, string]).maxBatchSize).To(Equal(10))
+	var (
+		ctx context.Context
+
+		action  *MockAction[string, string]
+		options []option[string, string]
+		b       *batcher[string, string]
+	)
+
+	BeforeEach(func() {
+		ctx = context.TODO()
+		action = NewMockAction[string, string](ctrl)
 	})
 
-	It("can set schedule function", func() {
-		scheduler := NewInstantScheduler()
-		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithScheduler[string, string](scheduler))
-
-		Expect(dl.(*batcher[string, string]).scheduler).To(Equal(scheduler))
+	JustBeforeEach(func() {
+		b = New[string, string](ctx, action, options...).(*batcher[string, string])
 	})
 
-	It("can set concurrency control", func() {
-		concurrencyControl := NewUnlimitedConcurrencyControl()
-		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithConcurrencyControl[string, string](concurrencyControl))
+	Describe("can set max batch size", func() {
+		var size int
+		BeforeEach(func() {
+			size = gofakeit.Number(10, 100)
+			options = append(options, WithMaxBatchSize[string, string](size))
+		})
 
-		pointer1 := reflect.ValueOf(dl.(*batcher[string, string]).concurrencyControl).Pointer()
-		pointer2 := reflect.ValueOf(concurrencyControl).Pointer()
+		It("should set max batch size", func() {
+			Expect(b.maxBatchSize).To(Equal(size))
+		})
+	})
 
-		Expect(pointer1).To(Equal(pointer2))
+	Describe("can set schedule function", func() {
+		var scheduler Scheduler
+		BeforeEach(func() {
+			scheduler = NewInstantScheduler()
+			options = append(options, WithScheduler[string, string](scheduler))
+		})
+
+		It("should set schedule function", func() {
+			Expect(b.scheduler).To(Equal(scheduler))
+		})
+	})
+
+	Describe("can set concurrency control", func() {
+		var cc ConcurrencyControl
+		BeforeEach(func() {
+			cc = NewUnlimitedConcurrencyControl()
+			options = append(options, WithConcurrencyControl[string, string](cc))
+		})
+
+		It("should set concurrency control", func() {
+			Expect(b.concurrencyControl).To(Equal(cc))
+		})
 	})
 })

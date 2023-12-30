@@ -7,6 +7,10 @@ import (
 	"k8s.io/utils/clock"
 )
 
+type Scheduler interface {
+	Schedule(ctx context.Context, batch Batch, callback SchedulerCallback)
+}
+
 type SchedulerCallback interface {
 	Call()
 }

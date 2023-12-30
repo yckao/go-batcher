@@ -20,7 +20,7 @@ var _ = Describe("UnlimitedConcurrencyControl", func() {
 	})
 
 	It("should always return a token", func() {
-		cc := UnlimitedConcurrencyControl{}
+		cc := unlimitedConcurrencyControl{}
 		token, err := cc.Acquire(context.Background())
 		Expect(err).Should(BeNil())
 		Expect(token).ShouldNot(BeNil())
