@@ -8,7 +8,6 @@ import (
 
 type Batcher[REQ any, RES any] interface {
 	Do(context.Context, REQ) Thunk[RES]
-	Dispatch()
 	Shutdown() error
 }
 
@@ -22,19 +21,33 @@ type Batch interface {
 	Dispatch() <-chan struct{}
 }
 
-type BatchDoFn[REQ any, RES any] func(context.Context, []REQ) []Response[RES]
-type Scheduler interface {
-	Schedule(ctx context.Context, batch Batch, callback SchedulerCallback)
+type Action[REQ any, RES any] interface {
+	Perform(context.Context, []REQ) []Response[RES]
 }
 
-func New[REQ any, RES any](ctx context.Context, doFn BatchDoFn[REQ, RES], options ...option[REQ, RES]) Batcher[REQ, RES] {
+type action[REQ any, RES any] struct {
+	fn func(context.Context, []REQ) []Response[RES]
+}
+
+func NewAction[REQ any, RES any](fn func(context.Context, []REQ) []Response[RES]) Action[REQ, RES] {
+	return &action[REQ, RES]{
+		fn: fn,
+	}
+}
+
+func (b *action[REQ, RES]) Perform(ctx context.Context, requests []REQ) []Response[RES] {
+	return b.fn(ctx, requests)
+}
+
+func New[REQ any, RES any](ctx context.Context, action Action[REQ, RES], options ...option[REQ, RES]) Batcher[REQ, RES] {
 	b := &batcher[REQ, RES]{
 		ctx:                ctx,
+		closed:             make(chan bool),
 		batches:            make(chan []*batch[REQ, RES], 1),
-		doFn:               doFn,
+		action:             action,
 		scheduler:          NewTimeWindowScheduler(2 * time.Second),
 		maxBatchSize:       100,
-		concurrencyControl: &UnlimitedConcurrencyControl{},
+		concurrencyControl: NewUnlimitedConcurrencyControl(),
 	}
 
 	b.batches <- []*batch[REQ, RES]{}
@@ -48,10 +61,10 @@ func New[REQ any, RES any](ctx context.Context, doFn BatchDoFn[REQ, RES], option
 
 type batcher[REQ any, RES any] struct {
 	ctx                context.Context
-	closed             bool
+	closed             chan bool
 	wg                 sync.WaitGroup
 	batches            chan []*batch[REQ, RES]
-	doFn               BatchDoFn[REQ, RES]
+	action             Action[REQ, RES]
 	scheduler          Scheduler
 	concurrencyControl ConcurrencyControl
 	maxBatchSize       int
@@ -74,12 +87,17 @@ func (b *batch[K, V]) Dispatch() <-chan struct{} {
 
 func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 	thunk := NewThunk[RES]()
-	if b.closed {
-		thunk.Error(ctx, context.Canceled)
-		return thunk
-	}
 
 	batches := <-b.batches
+
+	select {
+	case <-b.closed:
+		thunk.Error(ctx, context.Canceled)
+		b.batches <- batches
+		return thunk
+	default:
+	}
+
 	if len(batches) == 0 || len(batches[len(batches)-1].requests) >= b.maxBatchSize {
 		bat := &batch[REQ, RES]{
 			full:     make(chan struct{}),
@@ -108,21 +126,16 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 }
 
 func (b *batcher[REQ, RES]) Shutdown() error {
-	b.closed = true
-	b.Dispatch()
+	close(b.closed)
+	b.flushall()
 	b.wg.Wait()
 	return nil
 }
 
-func (b *batcher[REQ, RES]) Dispatch() {
+func (b *batcher[REQ, RES]) flushall() {
 	batches := <-b.batches
 	for _, batch := range batches {
-		select {
-		case <-batch.full:
-		case <-batch.dispatch:
-		default:
-			close(batch.dispatch)
-		}
+		close(batch.dispatch)
 	}
 	b.batches <- batches
 }
@@ -143,10 +156,12 @@ func (b *batcher[REQ, RES]) dispatch() {
 		for _, thunk := range batch.thunks {
 			thunk.Error(ctx, err)
 		}
+
+		b.wg.Done()
+		return
 	}
 
-	results := b.doFn(ctx, batch.requests)
-
+	results := b.action.Perform(ctx, batch.requests)
 	token.Release()
 
 	for index, res := range results {

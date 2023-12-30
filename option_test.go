@@ -8,10 +8,6 @@ import (
 	"context"
 )
 
-type testConcurrencyControl struct{}
-
-func (c *testConcurrencyControl) Acquire(ctx context.Context) (func(), error) { return func() {}, nil }
-
 var _ = Describe("Option", func() {
 	var (
 		ctx context.Context
