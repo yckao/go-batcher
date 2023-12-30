@@ -4,15 +4,39 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gleak"
+	gomock "go.uber.org/mock/gomock"
 )
 
-var _ = Describe("DataLoader", func() {
+var _ = Describe("Action", func() {
+	var (
+		a Action[string, string]
+
+		called bool
+	)
+
+	BeforeEach(func() {
+		a = NewAction[string, string](func(ctx context.Context, requests []string) []Response[string] {
+			called = true
+			return nil
+		})
+	})
+
+	JustBeforeEach(func() {
+		a.Perform(context.Background(), nil)
+	})
+
+	It("should call callback", func() {
+		Expect(called).To(BeTrue())
+	})
+})
+
+var _ = Describe("Batcher", func() {
 	BeforeEach(func() {
 		goods := Goroutines()
 		DeferCleanup(func() {
@@ -20,162 +44,372 @@ var _ = Describe("DataLoader", func() {
 		})
 	})
 
-	It("can batch do request", func() {
-		ctx := context.TODO()
-		loadCount := 0
-		batchFn := func(ctx context.Context, keys []string) []Response[string] {
-			defer GinkgoRecover()
+	var (
+		ctx        context.Context
+		cancelFunc context.CancelFunc
+	)
 
-			loadCount += 1
-			response := make([]Response[string], len(keys))
-			for index, key := range keys {
-				response[index] = Response[string]{
-					Response: "res:" + key,
-				}
-			}
-
-			return response
-		}
-
-		batcher := New[string, string](ctx, batchFn)
-		wg := &sync.WaitGroup{}
-		wg.Add(4)
-
-		for i := 0; i < 4; i++ {
-			k := fmt.Sprintf("key%d", i)
-			r := fmt.Sprintf("res:key%d", i)
-			go func() {
-				defer GinkgoRecover()
-				defer wg.Done()
-
-				val, err := batcher.Do(ctx, k).Await(ctx)
-				Expect(err).To(BeNil())
-				Expect(val).To(Equal(r))
-			}()
-		}
-
-		wg.Wait()
-		Expect(loadCount).To(Equal(1))
+	BeforeEach(func() {
+		ctx, cancelFunc = context.WithCancel(context.TODO())
 	})
 
-	It("split batch if over max batch size", func() {
-		ctx := context.TODO()
-		loadCount := 0
-		batchFn := func(ctx context.Context, keys []string) []Response[string] {
-			loadCount += 1
-			result := make([]Response[string], len(keys))
-			for index, key := range keys {
-				result[index] = Response[string]{
-					Response: "res:" + key,
-				}
-			}
-			return result
-		}
+	AfterEach(func() {
+		cancelFunc()
+	})
 
-		batcher := New[string, string](
-			ctx, batchFn,
-			WithMaxBatchSize[string, string](2),
-			WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)),
+	Describe("Batcher[string, string]", func() {
+		var (
+			wg      *sync.WaitGroup
+			action  *MockAction[string, string]
+			b       *batcher[string, string]
+			options []option[string, string]
 		)
-		wg := &sync.WaitGroup{}
-		wg.Add(5)
 
-		for i := 0; i < 5; i++ {
-			k := fmt.Sprintf("key%d", i)
-			r := fmt.Sprintf("res:key%d", i)
-			go func() {
-				defer GinkgoRecover()
-				defer wg.Done()
+		BeforeEach(func() {
+			wg = &sync.WaitGroup{}
+			action = NewMockAction[string, string](ctrl)
+		})
 
-				val, err := batcher.Do(ctx, k).Await(ctx)
-				Expect(err).To(BeNil())
-				Expect(val).To(Equal(r))
-			}()
-		}
+		JustBeforeEach(func() {
+			b = New[string, string](ctx, action, options...).(*batcher[string, string])
+		})
 
-		wg.Wait()
-		Expect(loadCount).To(Equal(3))
-	})
+		Describe("can batch do request", func() {
+			var (
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+			)
 
-	It("can manually dispatch batch", func() {
-		ctx := context.TODO()
-		loadCount := 0
-		values := map[string]string{
-			"foo": "foobar",
-		}
+			BeforeEach(func() {
+				actionCount = gofakeit.Number(3, 5)
+				options = append(options, WithMaxBatchSize[string, string](actionCount))
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
 
-		batchFn := func(ctx context.Context, keys []string) []Response[string] {
-			defer GinkgoRecover()
-
-			loadCount += 1
-			result := make([]Response[string], len(keys))
-			for index, key := range keys {
-				result[index] = Response[string]{
-					Response: values[key],
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					responses[i] = Response[string]{
+						Response: fmt.Sprintf("res: #%d", i),
+					}
 				}
-			}
 
-			return result
-		}
+				action.EXPECT().Perform(ctx, requests).Times(1).Return(responses)
+			})
 
-		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](200), WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)))
-		start := time.Now()
-		thunk := batcher.Do(ctx, "foo")
-		batcher.Dispatch()
-		val, err := thunk.Await(ctx)
-		Expect(time.Now().Before(start.Add(500 * time.Millisecond))).To(BeTrue())
-		Expect(val).To(Equal(values["foo"]))
-		Expect(err).To(BeNil())
-		Expect(loadCount).To(Equal(1))
-	})
-
-	It("can early dispatch if full", func() {
-		ctx := context.TODO()
-		loadCount := 0
-		values := map[string]string{
-			"foo": "foobar",
-		}
-
-		batchFn := func(ctx context.Context, keys []string) []Response[string] {
-			defer GinkgoRecover()
-
-			loadCount += 1
-			result := make([]Response[string], len(keys))
-			for index, key := range keys {
-				result[index] = Response[string]{
-					Response: values[key],
+			It("should batch do request", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						Expect(err).To(BeNil())
+						Expect(val).To(Equal(responses[i].Response))
+					}(i)
+					<-time.After(50 * time.Millisecond)
 				}
-			}
 
-			return result
-		}
+				wg.Wait()
+			})
+		})
 
-		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](0), WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)))
-		start := time.Now()
-		thunk := batcher.Do(ctx, "foo")
-		val, err := thunk.Await(ctx)
-		Expect(time.Now().Before(start.Add(500 * time.Millisecond))).To(BeTrue())
-		Expect(val).To(Equal(values["foo"]))
-		Expect(err).To(BeNil())
-		Expect(loadCount).To(Equal(1))
-	})
+		Describe("can handle mix value and error response", func() {
+			var (
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+			)
 
-	It("dispatch multiple time should not crash dataloader", func() {
-		ctx := context.TODO()
-		batchLoadFn := func(ctx context.Context, keys []string) []Response[string] {
-			defer GinkgoRecover()
+			BeforeEach(func() {
+				actionCount = gofakeit.Number(5, 30)
+				options = append(options, WithMaxBatchSize[string, string](actionCount))
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
 
-			result := make([]Response[string], len(keys))
-			return result
-		}
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					if i%2 == 0 {
+						responses[i] = Response[string]{
+							Response: fmt.Sprintf("res: #%d", i),
+						}
+					} else {
+						responses[i] = Response[string]{
+							Error: fmt.Errorf("err: #%d", i),
+						}
+					}
+				}
 
-		loader := New[string, string](ctx, batchLoadFn).(*batcher[string, string])
-		loader.dispatch()
-		loader.dispatch()
+				action.EXPECT().Perform(ctx, requests).Times(1).Return(responses)
+			})
+
+			It("should have corrsponding value and error", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						if err != nil {
+							Expect(err).To(Equal(responses[i].Error))
+						} else {
+							Expect(err).ToNot(HaveOccurred())
+						}
+						Expect(val).To(Equal(responses[i].Response))
+					}(i)
+					<-time.After(50 * time.Millisecond)
+				}
+
+				wg.Wait()
+			})
+		})
+
+		Describe("split batch if over max batch size", func() {
+			var (
+				batchSize   int
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+			)
+
+			BeforeEach(func() {
+				batchSize = gofakeit.Number(3, 5)
+				actionCount = batchSize * gofakeit.Number(1, 3)
+				options = append(options, WithMaxBatchSize[string, string](batchSize))
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
+
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					responses[i] = Response[string]{
+						Response: fmt.Sprintf("res: #%d", i),
+					}
+				}
+
+				for i := 0; i < actionCount; i += batchSize {
+					action.EXPECT().Perform(ctx, requests[i:i+batchSize]).Times(1).Return(responses[i : i+batchSize])
+				}
+			})
+
+			It("should split batch if over max batch size", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						Expect(err).To(BeNil())
+						Expect(val).To(Equal(responses[i].Response))
+					}(i)
+					<-time.After(50 * time.Millisecond)
+				}
+
+				wg.Wait()
+			})
+		})
+
+		Describe("can graceful shutdown", func() {
+			var (
+				batchSize   int
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+			)
+
+			BeforeEach(func() {
+				batchSize = gofakeit.Number(3, 5)
+				actionCount = batchSize * gofakeit.Number(1, 3)
+				options = append(options,
+					WithMaxBatchSize[string, string](batchSize),
+					WithScheduler[string, string](NewTestGracefulScheduler()),
+				)
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
+
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					responses[i] = Response[string]{
+						Response: fmt.Sprintf("res: #%d", i),
+					}
+				}
+
+				for i := 0; i < actionCount; i += batchSize {
+					action.EXPECT().Perform(ctx, requests[i:i+batchSize]).Times(1).Return(responses[i : i+batchSize])
+				}
+			})
+
+			It("should graceful shutdown", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						Expect(err).To(BeNil())
+						Expect(val).To(Equal(responses[i].Response))
+					}(i)
+					<-time.After(50 * time.Millisecond)
+				}
+
+				b.Shutdown()
+				wg.Wait()
+			})
+		})
+
+		Describe("could handle schedule invoke callback multiple time", func() {
+			var (
+				batchSize   int
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+			)
+
+			BeforeEach(func() {
+				batchSize = gofakeit.Number(3, 5)
+				actionCount = batchSize * gofakeit.Number(1, 3)
+				options = append(options,
+					WithMaxBatchSize[string, string](batchSize),
+					WithScheduler[string, string](NewMalfunctioingScheduler()),
+				)
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
+
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					responses[i] = Response[string]{
+						Response: fmt.Sprintf("res: #%d", i),
+					}
+				}
+
+				for i := 0; i < actionCount; i += batchSize {
+					action.EXPECT().Perform(ctx, requests[i:i+batchSize]).Times(1).Return(responses[i : i+batchSize])
+				}
+			})
+
+			It("without panic", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						Expect(err).To(BeNil())
+						Expect(val).To(Equal(responses[i].Response))
+					}(i)
+					<-time.After(50 * time.Millisecond)
+				}
+				b.Shutdown()
+				wg.Wait()
+			})
+		})
+
+		Describe("can handle concurrency control error", func() {
+			var (
+				batchSize   int
+				actionCount int
+				requests    []string
+				responses   []Response[string]
+				expectedErr error
+
+				cc *MockConcurrencyControl
+			)
+
+			BeforeEach(func() {
+				batchSize = gofakeit.Number(3, 5)
+				actionCount = batchSize * gofakeit.Number(1, 3)
+				cc = NewMockConcurrencyControl(ctrl)
+				options = append(options,
+					WithMaxBatchSize[string, string](batchSize),
+					WithConcurrencyControl[string, string](cc),
+				)
+				requests = make([]string, actionCount)
+				responses = make([]Response[string], actionCount)
+
+				for i := 0; i < actionCount; i++ {
+					requests[i] = fmt.Sprintf("req: #%d", i)
+					responses[i] = Response[string]{
+						Response: fmt.Sprintf("res: #%d", i),
+					}
+				}
+
+				expectedErr = fmt.Errorf("error")
+
+				action.EXPECT().Perform(ctx, gomock.Any()).Times(0)
+				cc.EXPECT().Acquire(gomock.Any()).Return(nil, expectedErr)
+			})
+
+			It("should return error", func() {
+				wg.Add(actionCount)
+				for i := 0; i < actionCount; i++ {
+					go func(i int) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						val, err := b.Do(ctx, requests[i]).Await(ctx)
+						Expect(err).To(Equal(expectedErr))
+						Expect(val).To(Equal(""))
+					}(i)
+					<-time.After(50 * time.Millisecond)
+				}
+
+				b.Shutdown()
+				wg.Wait()
+			})
+		})
+
+		Describe("should failed if already shutdown", func() {
+			It("should failed if already shutdown", func() {
+				b.Shutdown()
+				thunk := b.Do(ctx, "foo")
+				val, err := thunk.Await(ctx)
+				Expect(val).Should(Equal(""))
+				Expect(err).Should(HaveOccurred())
+			})
+		})
 	})
 })
 
-func TestDataloader(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Dataloader Suite")
+type TestGracefulScheduler struct{}
+
+func NewTestGracefulScheduler() Scheduler {
+	return &TestGracefulScheduler{}
+}
+
+func (t *TestGracefulScheduler) Schedule(ctx context.Context, batch Batch, callback SchedulerCallback) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-batch.Dispatch():
+		callback.Call()
+	}
+}
+
+type TestManuallyTriggerScheduler struct{}
+
+func NewTestManuallyTriggerScheduler() Scheduler {
+	return &TestGracefulScheduler{}
+}
+
+func (t *TestManuallyTriggerScheduler) Schedule(ctx context.Context, batch Batch, callback SchedulerCallback) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-batch.Dispatch():
+		callback.Call()
+	}
+}
+
+type MalfunctioingScheduler struct{}
+
+func NewMalfunctioingScheduler() Scheduler {
+	return &MalfunctioingScheduler{}
+}
+
+func (t *MalfunctioingScheduler) Schedule(ctx context.Context, batch Batch, callback SchedulerCallback) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-batch.Dispatch():
+		callback.Call()
+		callback.Call()
+	}
 }

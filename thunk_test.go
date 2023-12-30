@@ -1,279 +1,204 @@
 package batcher
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
 	"context"
 	"errors"
 	"sync"
-	"time"
+
+	"github.com/brianvoe/gofakeit/v6"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gleak"
 )
 
 var _ = Describe("Thunk", func() {
-	It("can wait value before it's set", func() {
-		thunk := NewThunk[string]()
-		expected := "foo"
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	var (
+		ctx        context.Context
+		cancelFunc context.CancelFunc
 
-		go func() {
-			defer GinkgoRecover()
+		expectedValue string
+		expectedError error
+		thunk         Thunk[string]
+	)
 
-			val, err := thunk.Await(ctx)
-			Expect(err).To(BeNil())
-			Expect(val).To(Equal(expected))
-			cancel()
-		}()
-
-		thunk.set(ctx, expected)
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+	BeforeEach(func() {
+		goods := Goroutines()
+		DeferCleanup(func() {
+			Eventually(Goroutines).ShouldNot(HaveLeaked(goods))
+		})
 	})
 
-	It("can get value after it's set", func() {
-		thunk := NewThunk[string]()
-		expected := "foo"
+	BeforeEach(func() {
+		ctx, cancelFunc = context.WithCancel(context.TODO())
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+		thunk = NewThunk[string]()
+		expectedValue = gofakeit.LetterN(10)
+		expectedError = errors.New(gofakeit.LetterN(10))
+	})
 
-		thunk.set(ctx, expected)
+	AfterEach(func() {
+		cancelFunc()
+	})
+
+	It("can check state", func() {
+		Expect(thunk.Pending()).To(BeTrue())
+		Expect(thunk.Fulfilled()).To(BeFalse())
+		Expect(thunk.Rejected()).To(BeFalse())
+
+		thunk.Set(ctx, expectedValue)
+		Expect(thunk.Pending()).To(BeFalse())
+		Expect(thunk.Fulfilled()).To(BeTrue())
+
+		thunk.Error(ctx, expectedError)
+		Expect(thunk.Pending()).To(BeFalse())
+		Expect(thunk.Rejected()).To(BeTrue())
+	})
+
+	It("can wait value before it's set", func() {
+		steps := map[string]chan struct{}{
+			"pendingChecked": make(chan struct{}),
+		}
+
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
 
 		go func() {
-			defer GinkgoRecover()
+			defer wg.Done()
 
+			Expect(thunk.Pending()).To(BeTrue())
+			steps["pendingChecked"] <- struct{}{}
 			val, err := thunk.Await(ctx)
-			Expect(err).To(BeNil())
-			Expect(val).To(Equal(expected))
-			cancel()
+			Expect(val).Should(Equal(expectedValue))
+			Expect(err).ShouldNot(HaveOccurred())
 		}()
 
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		go func() {
+			defer wg.Done()
+
+			<-steps["pendingChecked"]
+			thunk.Set(ctx, expectedValue)
+		}()
+
+		wg.Wait()
+	})
+
+	It("can wait value after it's set", func() {
+		thunk.Set(ctx, expectedValue)
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(expectedValue))
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	It("can get value multiple times", func() {
-		thunk := NewThunk[string]()
-		expected := "foo"
+		thunk.Set(ctx, expectedValue)
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(expectedValue))
+		Expect(err).ShouldNot(HaveOccurred())
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-		wg := sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(expected))
-			wg.Done()
-		}()
-
-		thunk.set(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(expected))
-			wg.Done()
-		}()
-
-		go func() {
-			wg.Wait()
-			cancel()
-		}()
-
-		<-ctx.Done()
-
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err = thunk.Await(ctx)
+		Expect(val).Should(Equal(expectedValue))
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	It("can get error multiple times", func() {
-		thunk := NewThunk[string]()
-		expected := errors.New("foo")
+		thunk.Error(ctx, expectedError)
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(""))
+		Expect(err).Should(Equal(expectedError))
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-		wg := sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			wg.Done()
-		}()
-
-		thunk.error(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			wg.Done()
-		}()
-
-		go func() {
-			wg.Wait()
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err = thunk.Await(ctx)
+		Expect(val).Should(Equal(""))
+		Expect(err).Should(Equal(expectedError))
 	})
 
 	It("can wait error before it's set", func() {
-		thunk := NewThunk[string]()
-		expected := errors.New("bar")
+		steps := map[string]chan struct{}{
+			"pendingChecked": make(chan struct{}),
+		}
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
 
 		go func() {
-			defer GinkgoRecover()
+			defer wg.Done()
 
+			Expect(thunk.Pending()).To(BeTrue())
+			steps["pendingChecked"] <- struct{}{}
 			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			cancel()
+			Expect(val).Should(Equal(""))
+			Expect(err).Should(Equal(expectedError))
 		}()
 
-		thunk.error(ctx, expected)
+		go func() {
+			defer wg.Done()
 
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+			<-steps["pendingChecked"]
+			thunk.Error(ctx, expectedError)
+		}()
+
+		wg.Wait()
 	})
 
-	It("can get error after it's set", func() {
-		thunk := NewThunk[string]()
-		expected := errors.New("bar")
-
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		thunk.error(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+	It("can wait error after it's set", func() {
+		thunk.Error(ctx, expectedError)
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(""))
+		Expect(err).Should(Equal(expectedError))
 	})
 
 	It("can override value with value", func() {
-		thunk := NewThunk[string]()
-		expected := "foo"
+		thunk.Set(ctx, "bar")
+		thunk.Set(ctx, expectedValue)
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		thunk.set(ctx, "bar")
-		thunk.set(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(expected))
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(expectedValue))
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	It("can override value with error", func() {
-		thunk := NewThunk[string]()
-		expected := errors.New("foo")
+		thunk.Set(ctx, "bar")
+		thunk.Error(ctx, expectedError)
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		thunk.set(ctx, "bar")
-		thunk.error(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(""))
+		Expect(err).Should(Equal(expectedError))
 	})
 
 	It("can override error with value", func() {
-		thunk := NewThunk[string]()
-		expected := "foo"
+		thunk.Error(ctx, errors.New("bar"))
+		thunk.Set(ctx, expectedValue)
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		thunk.error(ctx, errors.New("bar"))
-		thunk.set(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(expected))
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(expectedValue))
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	It("can override error with error", func() {
-		thunk := NewThunk[string]()
-		expected := errors.New("foo")
+		thunk.Error(ctx, errors.New("bar"))
+		thunk.Error(ctx, expectedError)
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		thunk.error(ctx, errors.New("bar"))
-		thunk.error(ctx, expected)
-
-		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(err).To(Equal(expected))
-			Expect(val).To(Equal(""))
-			cancel()
-		}()
-
-		<-ctx.Done()
-		Expect(ctx.Err()).To(Equal(context.Canceled))
+		val, err := thunk.Await(ctx)
+		Expect(val).Should(Equal(""))
+		Expect(err).Should(Equal(expectedError))
 	})
 
-	It("can cancel context", func() {
-		thunk := NewThunk[string]()
+	It("can cancelFunc context", func() {
+		ctx, cancelFunc := context.WithCancel(context.TODO())
 
-		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-
-		done := make(chan struct{})
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
 
 		go func() {
-			defer GinkgoRecover()
-
-			val, err := thunk.Await(ctx)
-			Expect(val).To(Equal(""))
-			Expect(err).To(Equal(context.Canceled))
-			done <- struct{}{}
+			defer wg.Done()
+			thunk.Await(ctx)
 		}()
 
-		cancel()
+		go func() {
+			defer wg.Done()
+			cancelFunc()
+		}()
 
-		<-done
+		wg.Wait()
 	})
 })

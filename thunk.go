@@ -2,9 +2,19 @@ package batcher
 
 import (
 	"context"
+	"reflect"
 )
 
-type Thunk[V any] struct {
+type Thunk[V any] interface {
+	Await(context.Context) (V, error)
+	Set(context.Context, V) (V, error)
+	Error(context.Context, error) (V, error)
+	Pending() bool
+	Fulfilled() bool
+	Rejected() bool
+}
+
+type thunk[V any] struct {
 	pending chan bool
 	data    chan *thunkData[V]
 }
@@ -14,8 +24,8 @@ type thunkData[V any] struct {
 	err   error
 }
 
-func NewThunk[V any]() *Thunk[V] {
-	thunk := &Thunk[V]{
+func NewThunk[V any]() Thunk[V] {
+	thunk := &thunk[V]{
 		pending: make(chan bool, 1),
 		data:    make(chan *thunkData[V], 1),
 	}
@@ -25,7 +35,7 @@ func NewThunk[V any]() *Thunk[V] {
 	return thunk
 }
 
-func (t *Thunk[V]) Await(ctx context.Context) (V, error) {
+func (t *thunk[V]) Await(ctx context.Context) (V, error) {
 	select {
 	case <-ctx.Done():
 		return *new(V), ctx.Err()
@@ -35,7 +45,7 @@ func (t *Thunk[V]) Await(ctx context.Context) (V, error) {
 	}
 }
 
-func (t *Thunk[V]) set(ctx context.Context, value V) (V, error) {
+func (t *thunk[V]) Set(ctx context.Context, value V) (V, error) {
 	select {
 	case <-t.data:
 	case <-t.pending:
@@ -46,7 +56,7 @@ func (t *Thunk[V]) set(ctx context.Context, value V) (V, error) {
 	return t.Await(ctx)
 }
 
-func (t *Thunk[V]) error(ctx context.Context, err error) (V, error) {
+func (t *thunk[V]) Error(ctx context.Context, err error) (V, error) {
 	select {
 	case <-t.data:
 	case <-t.pending:
@@ -55,4 +65,34 @@ func (t *Thunk[V]) error(ctx context.Context, err error) (V, error) {
 	t.data <- &thunkData[V]{err: err}
 
 	return t.Await(ctx)
+}
+
+func (t *thunk[V]) Pending() bool {
+	select {
+	case <-t.pending:
+		t.pending <- true
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *thunk[V]) Fulfilled() bool {
+	select {
+	case data := <-t.data:
+		t.data <- data
+		return !reflect.ValueOf(data.value).IsZero()
+	default:
+		return false
+	}
+}
+
+func (t *thunk[V]) Rejected() bool {
+	select {
+	case data := <-t.data:
+		t.data <- data
+		return data.err != nil
+	default:
+		return false
+	}
 }
