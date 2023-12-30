@@ -14,7 +14,7 @@ func WithScheduler[REQ any, RES any](scheduler Scheduler) option[REQ, RES] {
 	}
 }
 
-func WithConcurrencyControl[REQ any, RES any](concurrencyControl BatchConcurrencyControl) option[REQ, RES] {
+func WithConcurrencyControl[REQ any, RES any](concurrencyControl ConcurrencyControl) option[REQ, RES] {
 	return func(l *batcher[REQ, RES]) {
 		l.concurrencyControl = concurrencyControl
 	}

@@ -27,10 +27,6 @@ type Scheduler interface {
 	Schedule(ctx context.Context, batch Batch, callback SchedulerCallback)
 }
 
-type BatchConcurrencyControl interface {
-	Acquire(ctx context.Context) (func(), error)
-}
-
 func New[REQ any, RES any](ctx context.Context, doFn BatchDoFn[REQ, RES], options ...option[REQ, RES]) Batcher[REQ, RES] {
 	b := &batcher[REQ, RES]{
 		ctx:                ctx,
@@ -57,7 +53,7 @@ type batcher[REQ any, RES any] struct {
 	batches            chan []*batch[REQ, RES]
 	doFn               BatchDoFn[REQ, RES]
 	scheduler          Scheduler
-	concurrencyControl BatchConcurrencyControl
+	concurrencyControl ConcurrencyControl
 	maxBatchSize       int
 }
 
@@ -142,7 +138,7 @@ func (b *batcher[REQ, RES]) dispatch() {
 	batch := batches[0]
 
 	b.batches <- batches[1:]
-	release, err := b.concurrencyControl.Acquire(ctx)
+	token, err := b.concurrencyControl.Acquire(ctx)
 	if err != nil {
 		for _, thunk := range batch.thunks {
 			thunk.Error(ctx, err)
@@ -151,7 +147,7 @@ func (b *batcher[REQ, RES]) dispatch() {
 
 	results := b.doFn(ctx, batch.requests)
 
-	release()
+	token.Release()
 
 	for index, res := range results {
 		if res.Error != nil {
