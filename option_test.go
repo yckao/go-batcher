@@ -61,4 +61,16 @@ var _ = Describe("Option", func() {
 			Expect(b.concurrencyControl).To(Equal(cc))
 		})
 	})
+
+	Describe("can set metric set", func() {
+		var metrics *MetricSet
+		BeforeEach(func() {
+			metrics = NewMetricSet("foo", "bar", nil)
+			options = append(options, WithMetricSet[string, string](metrics))
+		})
+
+		It("should set metric set", func() {
+			Expect(b.metrics).To(Equal(metrics))
+		})
+	})
 })
