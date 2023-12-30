@@ -23,7 +23,11 @@ type Batch interface {
 }
 
 type BatchDoFn[REQ any, RES any] func(context.Context, []REQ) []Response[RES]
-type BatchScheduleFn func(ctx context.Context, batch Batch, callback func())
+type Scheduler interface {
+	Schedule(ctx context.Context, batch Batch, callback func())
+}
+
+// type BatchScheduleFn func(ctx context.Context, batch Batch, callback func())
 type BatchConcurrencyControl interface {
 	Acquire(ctx context.Context) (func(), error)
 }
@@ -33,7 +37,7 @@ func New[REQ any, RES any](ctx context.Context, doFn BatchDoFn[REQ, RES], option
 		ctx:                ctx,
 		batches:            make(chan []*batch[REQ, RES], 1),
 		doFn:               doFn,
-		scheduleFn:         NewTimeWindowScheduler(2 * time.Second),
+		scheduler:          NewTimeWindowScheduler(2 * time.Second),
 		maxBatchSize:       100,
 		concurrencyControl: &UnlimitedConcurrencyControl{},
 	}
@@ -53,7 +57,7 @@ type batcher[REQ any, RES any] struct {
 	wg                 sync.WaitGroup
 	batches            chan []*batch[REQ, RES]
 	doFn               BatchDoFn[REQ, RES]
-	scheduleFn         BatchScheduleFn
+	scheduler          Scheduler
 	concurrencyControl BatchConcurrencyControl
 	maxBatchSize       int
 }
@@ -92,7 +96,7 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 		batches = append(batches, bat)
 		b.wg.Add(1)
 
-		go b.scheduleFn(b.ctx, bat, b.dispatch)
+		go b.scheduler.Schedule(b.ctx, bat, b.dispatch)
 	}
 
 	bat := batches[len(batches)-1]

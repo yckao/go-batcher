@@ -22,7 +22,7 @@ var _ = Describe("NewTimeWindowScheduler", func() {
 		scheduler := NewTimeWindowScheduler(200 * time.Millisecond)
 		runned := false
 
-		go scheduler(context.TODO(), &MockBatch{}, func() { runned = true })
+		go scheduler.Schedule(context.TODO(), &MockBatch{}, func() { runned = true })
 		Expect(runned).To(BeFalse())
 
 		<-time.After(300 * time.Millisecond)
@@ -34,7 +34,7 @@ var _ = Describe("NewTimeWindowScheduler", func() {
 		runned := false
 
 		ctx, cancel := context.WithCancel(context.TODO())
-		go scheduler(ctx, &MockBatch{}, func() { runned = true })
+		go scheduler.Schedule(ctx, &MockBatch{}, func() { runned = true })
 		cancel()
 
 		<-time.After(200 * time.Millisecond)

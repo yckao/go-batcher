@@ -19,13 +19,10 @@ var _ = Describe("Option", func() {
 	})
 
 	It("can set schedule function", func() {
-		scheduleFn := (func(ctx context.Context, _ Batch, callback func()) { callback() })
-		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithScheduleFn[string, string](scheduleFn))
+		scheduler := NewInstantScheduler()
+		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithScheduler[string, string](scheduler))
 
-		pointer1 := reflect.ValueOf(dl.(*batcher[string, string]).scheduleFn).Pointer()
-		pointer2 := reflect.ValueOf(scheduleFn).Pointer()
-
-		Expect(pointer1).To(Equal(pointer2))
+		Expect(dl.(*batcher[string, string]).scheduler).To(Equal(scheduler))
 	})
 
 	It("can set concurrency control", func() {

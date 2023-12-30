@@ -75,7 +75,7 @@ var _ = Describe("DataLoader", func() {
 		batcher := New[string, string](
 			ctx, batchFn,
 			WithMaxBatchSize[string, string](2),
-			WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)),
+			WithScheduler[string, string](NewTimeWindowScheduler(1*time.Second)),
 		)
 		wg := &sync.WaitGroup{}
 		wg.Add(5)
@@ -118,7 +118,7 @@ var _ = Describe("DataLoader", func() {
 			return result
 		}
 
-		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](200), WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)))
+		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](200), WithScheduler[string, string](NewTimeWindowScheduler(1*time.Second)))
 		start := time.Now()
 		thunk := batcher.Do(ctx, "foo")
 		batcher.Dispatch()
@@ -150,7 +150,7 @@ var _ = Describe("DataLoader", func() {
 			return result
 		}
 
-		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](0), WithScheduleFn[string, string](NewTimeWindowScheduler(1*time.Second)))
+		batcher := New[string, string](ctx, batchFn, WithMaxBatchSize[string, string](0), WithScheduler[string, string](NewTimeWindowScheduler(1*time.Second)))
 		start := time.Now()
 		thunk := batcher.Do(ctx, "foo")
 		val, err := thunk.Await(ctx)

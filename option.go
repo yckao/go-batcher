@@ -8,9 +8,9 @@ func WithMaxBatchSize[REQ any, RES any](maxBatchSize int) option[REQ, RES] {
 	}
 }
 
-func WithScheduleFn[REQ any, RES any](scheduleFn BatchScheduleFn) option[REQ, RES] {
+func WithScheduler[REQ any, RES any](scheduler Scheduler) option[REQ, RES] {
 	return func(l *batcher[REQ, RES]) {
-		l.scheduleFn = scheduleFn
+		l.scheduler = scheduler
 	}
 }
 
