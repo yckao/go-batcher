@@ -23,5 +23,8 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    - name: Install Ginkgo
+      run: go install github.com/onsi/ginkgo/v2
+
     - name: Test
       run: ginkgo run --race --timeout 30s
