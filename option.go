@@ -19,3 +19,9 @@ func WithConcurrencyControl[REQ any, RES any](concurrencyControl ConcurrencyCont
 		l.concurrencyControl = concurrencyControl
 	}
 }
+
+func WithMetricSet[REQ any, RES any](metrics *MetricSet) option[REQ, RES] {
+	return func(l *batcher[REQ, RES]) {
+		l.metrics = metrics
+	}
+}

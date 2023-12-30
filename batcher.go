@@ -56,13 +56,19 @@ func New[REQ any, RES any](ctx context.Context, action Action[REQ, RES], options
 		option(b)
 	}
 
+	if b.metrics == nil {
+		b.metrics = NewMetricSet("go", "batcher", nil)
+	}
+
 	return b
 }
 
 type batcher[REQ any, RES any] struct {
-	ctx                context.Context
-	closed             chan bool
-	wg                 sync.WaitGroup
+	ctx     context.Context
+	closed  chan bool
+	wg      sync.WaitGroup
+	metrics *MetricSet
+
 	batches            chan []*batch[REQ, RES]
 	action             Action[REQ, RES]
 	scheduler          Scheduler
@@ -71,10 +77,11 @@ type batcher[REQ any, RES any] struct {
 }
 
 type batch[REQ any, RES any] struct {
-	full     chan struct{}
-	dispatch chan struct{}
-	requests []REQ
-	thunks   []Thunk[RES]
+	full      chan struct{}
+	dispatch  chan struct{}
+	requests  []REQ
+	thunks    []Thunk[RES]
+	createdAt time.Time
 }
 
 func (b *batch[K, V]) Full() <-chan struct{} {
@@ -86,12 +93,16 @@ func (b *batch[K, V]) Dispatch() <-chan struct{} {
 }
 
 func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
+	b.metrics.DoActionCounter.Inc()
+
+	b.metrics.ThunkCreatedCounter.Inc()
 	thunk := NewThunk[RES]()
 
 	batches := <-b.batches
 
 	select {
 	case <-b.closed:
+		b.metrics.ThunkErrorCounter.Inc()
 		thunk.Error(ctx, context.Canceled)
 		b.batches <- batches
 		return thunk
@@ -99,16 +110,19 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 	}
 
 	if len(batches) == 0 || len(batches[len(batches)-1].requests) >= b.maxBatchSize {
+		b.metrics.BatchCreatedCounter.Inc()
 		bat := &batch[REQ, RES]{
-			full:     make(chan struct{}),
-			dispatch: make(chan struct{}),
-			requests: []REQ{},
-			thunks:   []Thunk[RES]{},
+			full:      make(chan struct{}),
+			dispatch:  make(chan struct{}),
+			requests:  []REQ{},
+			thunks:    []Thunk[RES]{},
+			createdAt: time.Now(),
 		}
 
 		batches = append(batches, bat)
 		b.wg.Add(1)
 
+		b.metrics.SchedulerScheduleCounter.Inc()
 		go b.scheduler.Schedule(b.ctx, bat, NewSchedulerCallback(b.dispatch))
 	}
 
@@ -117,6 +131,7 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 	bat.thunks = append(bat.thunks, thunk)
 
 	if len(batches) != 0 && len(batches[len(batches)-1].requests) >= b.maxBatchSize {
+		b.metrics.BatchFullCounter.Inc()
 		close(batches[len(batches)-1].full)
 	}
 
@@ -141,6 +156,7 @@ func (b *batcher[REQ, RES]) flushall() {
 }
 
 func (b *batcher[REQ, RES]) dispatch() {
+	b.metrics.SchedulerCallbackCounter.Inc()
 	ctx := b.ctx
 	batches := <-b.batches
 
@@ -150,27 +166,44 @@ func (b *batcher[REQ, RES]) dispatch() {
 	}
 	batch := batches[0]
 
+	b.metrics.BatchStartedCounter.Inc()
 	b.batches <- batches[1:]
+
+	b.metrics.BatchSizeHistogram.Observe(float64(len(batch.requests)))
+	b.metrics.CouncurrencyControlAcquireCounter.Inc()
 	token, err := b.concurrencyControl.Acquire(ctx)
+
 	if err != nil {
+		b.metrics.ConcurrencyControlErrorCounter.Inc()
 		for _, thunk := range batch.thunks {
+			b.metrics.ThunkErrorCounter.Inc()
 			thunk.Error(ctx, err)
 		}
 
+		b.metrics.BatchDoneCounter.Inc()
+		b.metrics.BatchLifetimeHistogram.Observe(time.Since(batch.createdAt).Seconds())
 		b.wg.Done()
 		return
 	}
 
+	b.metrics.ConcurrencyControlTokenCounter.Inc()
+	b.metrics.BatchActionPerformCounter.Inc()
 	results := b.action.Perform(ctx, batch.requests)
+
+	b.metrics.ConcurrencyControlReleaseCounter.Inc()
 	token.Release()
 
 	for index, res := range results {
 		if res.Error != nil {
+			b.metrics.ThunkErrorCounter.Inc()
 			batch.thunks[index].Error(ctx, res.Error)
 		} else {
+			b.metrics.ThunkSuccessCounter.Inc()
 			batch.thunks[index].Set(ctx, res.Response)
 		}
 	}
 
+	b.metrics.BatchDoneCounter.Inc()
+	b.metrics.BatchLifetimeHistogram.Observe(time.Since(batch.createdAt).Seconds())
 	b.wg.Done()
 }

@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gleak"
+	"github.com/prometheus/client_golang/prometheus"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -77,13 +78,16 @@ var _ = Describe("Batcher", func() {
 		Describe("can batch do request", func() {
 			var (
 				actionCount int
+				metrics     *MetricSet
 				requests    []string
 				responses   []Response[string]
 			)
 
 			BeforeEach(func() {
 				actionCount = gofakeit.Number(3, 5)
-				options = append(options, WithMaxBatchSize[string, string](actionCount))
+				metrics = NewMetricSet("go", "batcher", nil)
+				metrics.Register(prometheus.DefaultRegisterer)
+				options = append(options, WithMaxBatchSize[string, string](actionCount), WithMetricSet[string, string](metrics))
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
 
@@ -334,17 +338,18 @@ var _ = Describe("Batcher", func() {
 
 				expectedErr = fmt.Errorf("error")
 
+				cc.EXPECT().Acquire(gomock.Any()).MinTimes(1).Return(nil, expectedErr)
 				action.EXPECT().Perform(ctx, gomock.Any()).Times(0)
-				cc.EXPECT().Acquire(gomock.Any()).Return(nil, expectedErr)
 			})
 
 			It("should return error", func() {
 				wg.Add(actionCount)
 				for i := 0; i < actionCount; i++ {
 					go func(i int) {
-						defer GinkgoRecover()
 						defer wg.Done()
+
 						val, err := b.Do(ctx, requests[i]).Await(ctx)
+
 						Expect(err).To(Equal(expectedErr))
 						Expect(val).To(Equal(""))
 					}(i)
