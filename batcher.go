@@ -7,7 +7,7 @@ import (
 )
 
 type Batcher[REQ any, RES any] interface {
-	Do(context.Context, REQ) *Thunk[RES]
+	Do(context.Context, REQ) Thunk[RES]
 	Dispatch()
 	Shutdown() error
 }
@@ -62,7 +62,7 @@ type batch[REQ any, RES any] struct {
 	full     chan struct{}
 	dispatch chan struct{}
 	requests []REQ
-	thunks   []*Thunk[RES]
+	thunks   []Thunk[RES]
 }
 
 func (b *batch[K, V]) Full() <-chan struct{} {
@@ -73,10 +73,10 @@ func (b *batch[K, V]) Dispatch() <-chan struct{} {
 	return b.dispatch
 }
 
-func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) *Thunk[RES] {
+func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 	thunk := NewThunk[RES]()
 	if b.closed {
-		thunk.error(ctx, context.Canceled)
+		thunk.Error(ctx, context.Canceled)
 		return thunk
 	}
 
@@ -86,7 +86,7 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) *Thunk[RES] {
 			full:     make(chan struct{}),
 			dispatch: make(chan struct{}),
 			requests: []REQ{},
-			thunks:   []*Thunk[RES]{},
+			thunks:   []Thunk[RES]{},
 		}
 
 		batches = append(batches, bat)
@@ -142,7 +142,7 @@ func (b *batcher[REQ, RES]) dispatch() {
 	release, err := b.concurrencyControl.Acquire(ctx)
 	if err != nil {
 		for _, thunk := range batch.thunks {
-			thunk.error(ctx, err)
+			thunk.Error(ctx, err)
 		}
 	}
 
@@ -152,9 +152,9 @@ func (b *batcher[REQ, RES]) dispatch() {
 
 	for index, res := range results {
 		if res.Error != nil {
-			batch.thunks[index].error(ctx, res.Error)
+			batch.thunks[index].Error(ctx, res.Error)
 		} else {
-			batch.thunks[index].set(ctx, res.Response)
+			batch.thunks[index].Set(ctx, res.Response)
 		}
 	}
 

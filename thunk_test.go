@@ -26,7 +26,7 @@ var _ = Describe("Thunk", func() {
 			cancel()
 		}()
 
-		thunk.set(ctx, expected)
+		thunk.Set(ctx, expected)
 
 		<-ctx.Done()
 		Expect(ctx.Err()).To(Equal(context.Canceled))
@@ -38,7 +38,7 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.set(ctx, expected)
+		thunk.Set(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -69,7 +69,7 @@ var _ = Describe("Thunk", func() {
 			wg.Done()
 		}()
 
-		thunk.set(ctx, expected)
+		thunk.Set(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -106,7 +106,7 @@ var _ = Describe("Thunk", func() {
 			wg.Done()
 		}()
 
-		thunk.error(ctx, expected)
+		thunk.Error(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -141,7 +141,7 @@ var _ = Describe("Thunk", func() {
 			cancel()
 		}()
 
-		thunk.error(ctx, expected)
+		thunk.Error(ctx, expected)
 
 		<-ctx.Done()
 		Expect(ctx.Err()).To(Equal(context.Canceled))
@@ -153,7 +153,7 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.error(ctx, expected)
+		thunk.Error(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -174,8 +174,8 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.set(ctx, "bar")
-		thunk.set(ctx, expected)
+		thunk.Set(ctx, "bar")
+		thunk.Set(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -196,8 +196,8 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.set(ctx, "bar")
-		thunk.error(ctx, expected)
+		thunk.Set(ctx, "bar")
+		thunk.Error(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -218,8 +218,8 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.error(ctx, errors.New("bar"))
-		thunk.set(ctx, expected)
+		thunk.Error(ctx, errors.New("bar"))
+		thunk.Set(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
@@ -240,8 +240,8 @@ var _ = Describe("Thunk", func() {
 
 		ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 
-		thunk.error(ctx, errors.New("bar"))
-		thunk.error(ctx, expected)
+		thunk.Error(ctx, errors.New("bar"))
+		thunk.Error(ctx, expected)
 
 		go func() {
 			defer GinkgoRecover()
