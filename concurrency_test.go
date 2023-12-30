@@ -8,9 +8,17 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gleak"
 )
 
 var _ = Describe("UnlimitedConcurrencyControl", func() {
+	BeforeEach(func() {
+		goods := Goroutines()
+		DeferCleanup(func() {
+			Eventually(Goroutines).ShouldNot(HaveLeaked(goods))
+		})
+	})
+
 	It("should always return a token", func() {
 		cc := UnlimitedConcurrencyControl{}
 		token, err := cc.Acquire(context.Background())

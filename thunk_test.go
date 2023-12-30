@@ -8,9 +8,11 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gleak"
 )
 
 var _ = Describe("Thunk", func() {
+
 	var (
 		ctx        context.Context
 		cancelFunc context.CancelFunc
@@ -19,6 +21,13 @@ var _ = Describe("Thunk", func() {
 		expectedError error
 		thunk         Thunk[string]
 	)
+
+	BeforeEach(func() {
+		goods := Goroutines()
+		DeferCleanup(func() {
+			Eventually(Goroutines).ShouldNot(HaveLeaked(goods))
+		})
+	})
 
 	BeforeEach(func() {
 		ctx, cancelFunc = context.WithCancel(context.TODO())

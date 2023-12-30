@@ -6,8 +6,8 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	. "github.com/onsi/ginkgo/v2"
-
-	// . "github.com/onsi/gomega"
+	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gleak"
 	"github.com/yckao/go-batcher/internal/mock"
 )
 
@@ -27,6 +27,13 @@ var _ = Describe("TimeWindowScheduler", func() {
 
 		scheduler *TimeWindowScheduler
 	)
+
+	BeforeEach(func() {
+		goods := Goroutines()
+		DeferCleanup(func() {
+			Eventually(Goroutines).ShouldNot(HaveLeaked(goods))
+		})
+	})
 
 	BeforeEach(func() {
 		ctx, cancelFunc = context.WithCancel(context.TODO())
