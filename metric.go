@@ -4,6 +4,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// MetricSet holds all the metrics for a Batcher.
 type MetricSet struct {
 	BatchCreatedCounter prometheus.Counter
 	BatchStartedCounter prometheus.Counter
@@ -30,6 +31,7 @@ type MetricSet struct {
 	ThunkErrorCounter   prometheus.Counter
 }
 
+// NewMetricSet creates a new MetricSet with the provided namespace, subsystem, and constant labels.
 func NewMetricSet(namespace, subsystem string, constLabels prometheus.Labels) *MetricSet {
 	return &MetricSet{
 		BatchCreatedCounter: prometheus.NewCounter(prometheus.CounterOpts{
@@ -156,6 +158,7 @@ func NewMetricSet(namespace, subsystem string, constLabels prometheus.Labels) *M
 	}
 }
 
+// Register registers all the metrics in the MetricSet with the provided Prometheus registry.
 func (m *MetricSet) Register(registry prometheus.Registerer) {
 	registry.MustRegister(
 		m.BatchCreatedCounter,
