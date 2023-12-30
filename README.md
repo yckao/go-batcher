@@ -1,3 +1,8 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/yckao/go-batcher)](https://goreportcard.com/report/github.com/yckao/go-batcher)
+[![Go](https://github.com/yckao/go-batcher/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/yckao/go-batcher/actions/workflows/go.yml)
+[![CodeQL](https://github.com/yckao/go-batcher/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/yckao/go-batcher/actions/workflows/github-code-scanning/codeql)
+[![Godoc](https://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yckao/go-batcher)
+
 # go-batcher
 
 This is a batcher inspired by [GraphQL's Dataloader](https://github.com/graphql/dataloader) and [yckao's dataloader implementation](https://github.com/yckao/go-dataloader). 
