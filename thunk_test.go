@@ -12,8 +12,8 @@ import (
 
 var _ = Describe("Thunk", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
+		ctx        context.Context
+		cancelFunc context.CancelFunc
 
 		expectedValue string
 		expectedError error
@@ -21,7 +21,7 @@ var _ = Describe("Thunk", func() {
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
+		ctx, cancelFunc = context.WithCancel(context.TODO())
 
 		thunk = NewThunk[string]()
 		expectedValue = gofakeit.LetterN(10)
@@ -29,7 +29,7 @@ var _ = Describe("Thunk", func() {
 	})
 
 	AfterEach(func() {
-		cancel()
+		cancelFunc()
 	})
 
 	It("can check state", func() {
@@ -55,18 +55,20 @@ var _ = Describe("Thunk", func() {
 		wg.Add(2)
 
 		go func() {
+			defer wg.Done()
+
 			Expect(thunk.Pending()).To(BeTrue())
 			steps["pendingChecked"] <- struct{}{}
 			val, err := thunk.Await(ctx)
 			Expect(val).Should(Equal(expectedValue))
 			Expect(err).ShouldNot(HaveOccurred())
-			wg.Done()
 		}()
 
 		go func() {
+			defer wg.Done()
+
 			<-steps["pendingChecked"]
 			thunk.Set(ctx, expectedValue)
-			wg.Done()
 		}()
 
 		wg.Wait()
@@ -110,18 +112,20 @@ var _ = Describe("Thunk", func() {
 		wg.Add(2)
 
 		go func() {
+			defer wg.Done()
+
 			Expect(thunk.Pending()).To(BeTrue())
 			steps["pendingChecked"] <- struct{}{}
 			val, err := thunk.Await(ctx)
 			Expect(val).Should(Equal(""))
 			Expect(err).Should(Equal(expectedError))
-			wg.Done()
 		}()
 
 		go func() {
+			defer wg.Done()
+
 			<-steps["pendingChecked"]
 			thunk.Error(ctx, expectedError)
-			wg.Done()
 		}()
 
 		wg.Wait()
@@ -170,20 +174,20 @@ var _ = Describe("Thunk", func() {
 		Expect(err).Should(Equal(expectedError))
 	})
 
-	It("can cancel context", func() {
-		ctx, cancel := context.WithCancel(context.TODO())
+	It("can cancelFunc context", func() {
+		ctx, cancelFunc := context.WithCancel(context.TODO())
 
 		wg := &sync.WaitGroup{}
 		wg.Add(2)
 
 		go func() {
+			defer wg.Done()
 			thunk.Await(ctx)
-			wg.Done()
 		}()
 
 		go func() {
-			cancel()
-			wg.Done()
+			defer wg.Done()
+			cancelFunc()
 		}()
 
 		wg.Wait()

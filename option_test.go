@@ -26,7 +26,7 @@ var _ = Describe("Option", func() {
 	})
 
 	It("can set concurrency control", func() {
-		concurrencyControl := &testConcurrencyControl{}
+		concurrencyControl := NewUnlimitedConcurrencyControl()
 		dl := New[string, string](context.TODO(), func(ctx context.Context, keys []string) []Response[string] { return []Response[string]{} }, WithConcurrencyControl[string, string](concurrencyControl))
 
 		pointer1 := reflect.ValueOf(dl.(*batcher[string, string]).concurrencyControl).Pointer()

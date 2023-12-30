@@ -8,13 +8,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 
 	// . "github.com/onsi/gomega"
-	"github.com/yckao/go-batcher/mock"
+	"github.com/yckao/go-batcher/internal/mock"
 )
 
 var _ = Describe("TimeWindowScheduler", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
+		ctx        context.Context
+		cancelFunc context.CancelFunc
 
 		mockClock    *mock.MockClock
 		mockTimer    *mock.MockTimer
@@ -29,7 +29,7 @@ var _ = Describe("TimeWindowScheduler", func() {
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
+		ctx, cancelFunc = context.WithCancel(context.TODO())
 
 		mockClock = mock.NewMockClock(ctrl)
 		scheduler = &TimeWindowScheduler{
@@ -54,7 +54,7 @@ var _ = Describe("TimeWindowScheduler", func() {
 	})
 
 	AfterEach(func() {
-		cancel()
+		cancelFunc()
 	})
 
 	It("should not call callback if not triggered", func() {
@@ -90,8 +90,8 @@ var _ = Describe("TimeWindowScheduler", func() {
 
 var _ = Describe("InstantScheduler", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
+		ctx        context.Context
+		cancelFunc context.CancelFunc
 
 		mockBatch    *mock.MockBatch
 		mockCallback *mock.MockCallback
@@ -100,7 +100,7 @@ var _ = Describe("InstantScheduler", func() {
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
+		ctx, cancelFunc = context.WithCancel(context.TODO())
 		scheduler = &InstantScheduler{}
 
 		mockCallback = mock.NewMockCallback(ctrl)
@@ -108,7 +108,7 @@ var _ = Describe("InstantScheduler", func() {
 	})
 
 	AfterEach(func() {
-		cancel()
+		cancelFunc()
 	})
 
 	It("should call callback instantly", func() {
