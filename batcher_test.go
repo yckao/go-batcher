@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -174,8 +173,3 @@ var _ = Describe("DataLoader", func() {
 		loader.dispatch()
 	})
 })
-
-func TestDataloader(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Dataloader Suite")
-}

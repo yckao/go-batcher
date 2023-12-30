@@ -17,30 +17,30 @@ func (*MockBatch) Dispatch() <-chan struct{} {
 	return make(<-chan struct{})
 }
 
-var _ = Describe("NewTimeWindowScheduler", func() {
-	It("should run after specified duration", func() {
-		scheduler := NewTimeWindowScheduler(200 * time.Millisecond)
-		runned := false
+// var _ = Describe("NewTimeWindowScheduler", func() {
+// 	It("should run after specified duration", func() {
+// 		scheduler := NewTimeWindowScheduler(200 * time.Millisecond)
+// 		runned := false
 
-		go scheduler.Schedule(context.TODO(), &MockBatch{}, func() { runned = true })
-		Expect(runned).To(BeFalse())
+// 		go scheduler.Schedule(context.TODO(), &MockBatch{}, func() { runned = true })
+// 		Expect(runned).To(BeFalse())
 
-		<-time.After(300 * time.Millisecond)
-		Expect(runned).To(BeTrue())
-	})
+// 		<-time.After(300 * time.Millisecond)
+// 		Expect(runned).To(BeTrue())
+// 	})
 
-	It("can cancel", func() {
-		scheduler := NewTimeWindowScheduler(200 * time.Millisecond)
-		runned := false
+// 	It("can cancel", func() {
+// 		scheduler := NewTimeWindowScheduler(200 * time.Millisecond)
+// 		runned := false
 
-		ctx, cancel := context.WithCancel(context.TODO())
-		go scheduler.Schedule(ctx, &MockBatch{}, func() { runned = true })
-		cancel()
+// 		ctx, cancel := context.WithCancel(context.TODO())
+// 		go scheduler.Schedule(ctx, &MockBatch{}, func() { runned = true })
+// 		cancel()
 
-		<-time.After(200 * time.Millisecond)
-		Expect(runned).To(BeFalse())
-	})
-})
+// 		<-time.After(200 * time.Millisecond)
+// 		Expect(runned).To(BeFalse())
+// 	})
+// })
 
 var _ = Describe("UnlimitedConcurrencyControl", func() {
 	It("should always return a release function", func() {

@@ -24,10 +24,9 @@ type Batch interface {
 
 type BatchDoFn[REQ any, RES any] func(context.Context, []REQ) []Response[RES]
 type Scheduler interface {
-	Schedule(ctx context.Context, batch Batch, callback func())
+	Schedule(ctx context.Context, batch Batch, callback SchedulerCallback)
 }
 
-// type BatchScheduleFn func(ctx context.Context, batch Batch, callback func())
 type BatchConcurrencyControl interface {
 	Acquire(ctx context.Context) (func(), error)
 }
@@ -96,7 +95,7 @@ func (b *batcher[REQ, RES]) Do(ctx context.Context, request REQ) Thunk[RES] {
 		batches = append(batches, bat)
 		b.wg.Add(1)
 
-		go b.scheduler.Schedule(b.ctx, bat, b.dispatch)
+		go b.scheduler.Schedule(b.ctx, bat, NewSchedulerCallback(b.dispatch))
 	}
 
 	bat := batches[len(batches)-1]

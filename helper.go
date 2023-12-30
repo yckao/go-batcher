@@ -2,47 +2,7 @@ package batcher
 
 import (
 	"context"
-	"time"
-
-	"k8s.io/utils/clock"
 )
-
-type TimeWindowScheduler struct {
-	clock      clock.Clock
-	timeWindow time.Duration
-}
-
-func NewTimeWindowScheduler(timeWindow time.Duration) Scheduler {
-	return &TimeWindowScheduler{
-		clock:      clock.RealClock{},
-		timeWindow: timeWindow,
-	}
-}
-
-func (t *TimeWindowScheduler) Schedule(ctx context.Context, batch Batch, callback func()) {
-	timer := t.clock.NewTimer(t.timeWindow)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return
-	case <-batch.Dispatch():
-		callback()
-	case <-batch.Full():
-		callback()
-	case <-timer.C():
-		callback()
-	}
-}
-
-type InstantScheduler struct{}
-
-func NewInstantScheduler() Scheduler {
-	return &InstantScheduler{}
-}
-
-func (i *InstantScheduler) Schedule(ctx context.Context, batch Batch, callback func()) {
-	callback()
-}
 
 type UnlimitedConcurrencyControl struct{}
 
