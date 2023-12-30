@@ -41,9 +41,10 @@ func batchFn(ctx context.Context, requests []string) []batcher.Response[*Example
 
 func main() {
 	ctx := context.Background()
-  cc := batcher.NewDefaultConcurrencyControl(100)
-	batcher := batcher.New[string, *ExampleData](ctx, batchFn, batcher.WithConcurrencyControl[string, *ExampleData](
-		cc
+	cc := batcher.NewLimitedConcurrencyControl(10)
+	action := batcher.NewAction[string, *ExampleData](batchFn)
+	batcher := batcher.New[string, *ExampleData](ctx, action, batcher.WithConcurrencyControl[string, *ExampleData](
+		cc,
 	))
 
 	thunk := batcher.Do(ctx, "World")
@@ -54,6 +55,3 @@ func main() {
 }
 ```
 
-## TODO
-
-- [ ] Rewrite Test
