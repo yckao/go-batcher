@@ -1,6 +1,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/yckao/go-batcher)](https://goreportcard.com/report/github.com/yckao/go-batcher)
 [![codecov](https://codecov.io/gh/yckao/go-batcher/graph/badge.svg?token=LY64CZWZPN)](https://codecov.io/gh/yckao/go-batcher)
-[![test](https://github.com/yckao/go-batcher/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yckao/go-batcher/actions/workflows/test.yml)
+[![Test](https://github.com/yckao/go-batcher/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yckao/go-batcher/actions/workflows/test.yml)
 [![CodeQL](https://github.com/yckao/go-batcher/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/yckao/go-batcher/actions/workflows/github-code-scanning/codeql)
 [![Godoc](https://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yckao/go-batcher)
 
