@@ -52,21 +52,24 @@ func (b *action[REQ, RES]) Perform(ctx context.Context, requests []REQ) []Respon
 }
 
 // New creates a new Batcher with the provided context, action, and options.
-func New[REQ any, RES any](ctx context.Context, action Action[REQ, RES], options ...option[REQ, RES]) Batcher[REQ, RES] {
+func New[REQ any, RES any](ctx context.Context, action Action[REQ, RES], options ...option) Batcher[REQ, RES] {
 	b := &batcher[REQ, RES]{
-		ctx:                ctx,
-		closed:             make(chan bool),
-		batches:            make(chan []*batch[REQ, RES], 1),
-		action:             action,
-		scheduler:          NewTimeWindowScheduler(2 * time.Second),
-		maxBatchSize:       100,
-		concurrencyControl: NewUnlimitedConcurrencyControl(),
+		ctx:     ctx,
+		closed:  make(chan bool),
+		batches: make(chan []*batch[REQ, RES], 1),
+		action:  action,
+
+		batcherConfig: &batcherConfig{
+			scheduler:          NewTimeWindowScheduler(2 * time.Second),
+			maxBatchSize:       100,
+			concurrencyControl: NewUnlimitedConcurrencyControl(),
+		},
 	}
 
 	b.batches <- []*batch[REQ, RES]{}
 
 	for _, option := range options {
-		option(b)
+		option(b.batcherConfig)
 	}
 
 	if b.metrics == nil {
@@ -78,16 +81,13 @@ func New[REQ any, RES any](ctx context.Context, action Action[REQ, RES], options
 
 // batcher is a concrete implementation of the Batcher interface.
 type batcher[REQ any, RES any] struct {
-	ctx     context.Context
-	closed  chan bool
-	wg      sync.WaitGroup
-	metrics *MetricSet
+	*batcherConfig
+	ctx    context.Context
+	closed chan bool
+	wg     sync.WaitGroup
 
-	batches            chan []*batch[REQ, RES]
-	action             Action[REQ, RES]
-	scheduler          Scheduler
-	concurrencyControl ConcurrencyControl
-	maxBatchSize       int
+	batches chan []*batch[REQ, RES]
+	action  Action[REQ, RES]
 }
 
 // batch is a concrete implementation of the Batch interface.
