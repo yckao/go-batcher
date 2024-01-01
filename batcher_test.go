@@ -63,7 +63,7 @@ var _ = Describe("Batcher", func() {
 			wg      *sync.WaitGroup
 			action  *MockAction[string, string]
 			b       *batcher[string, string]
-			options []option[string, string]
+			options []option
 		)
 
 		BeforeEach(func() {
@@ -87,7 +87,7 @@ var _ = Describe("Batcher", func() {
 				actionCount = gofakeit.Number(3, 5)
 				metrics = NewMetricSet("go", "batcher", nil)
 				metrics.Register(prometheus.DefaultRegisterer)
-				options = append(options, WithMaxBatchSize[string, string](actionCount), WithMetricSet[string, string](metrics))
+				options = append(options, WithMaxBatchSize(actionCount), WithMetricSet(metrics))
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
 
@@ -127,7 +127,7 @@ var _ = Describe("Batcher", func() {
 
 			BeforeEach(func() {
 				actionCount = gofakeit.Number(5, 30)
-				options = append(options, WithMaxBatchSize[string, string](actionCount))
+				options = append(options, WithMaxBatchSize(actionCount))
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
 
@@ -179,7 +179,7 @@ var _ = Describe("Batcher", func() {
 			BeforeEach(func() {
 				batchSize = gofakeit.Number(3, 5)
 				actionCount = batchSize * gofakeit.Number(1, 3)
-				options = append(options, WithMaxBatchSize[string, string](batchSize))
+				options = append(options, WithMaxBatchSize(batchSize))
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
 
@@ -224,8 +224,8 @@ var _ = Describe("Batcher", func() {
 				batchSize = gofakeit.Number(3, 5)
 				actionCount = batchSize * gofakeit.Number(1, 3)
 				options = append(options,
-					WithMaxBatchSize[string, string](batchSize),
-					WithScheduler[string, string](NewTestGracefulScheduler()),
+					WithMaxBatchSize(batchSize),
+					WithScheduler(NewTestGracefulScheduler()),
 				)
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
@@ -272,8 +272,8 @@ var _ = Describe("Batcher", func() {
 				batchSize = gofakeit.Number(3, 5)
 				actionCount = batchSize * gofakeit.Number(1, 3)
 				options = append(options,
-					WithMaxBatchSize[string, string](batchSize),
-					WithScheduler[string, string](NewMalfunctioingScheduler()),
+					WithMaxBatchSize(batchSize),
+					WithScheduler(NewMalfunctioingScheduler()),
 				)
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)
@@ -323,8 +323,8 @@ var _ = Describe("Batcher", func() {
 				actionCount = batchSize * gofakeit.Number(1, 3)
 				cc = NewMockConcurrencyControl(ctrl)
 				options = append(options,
-					WithMaxBatchSize[string, string](batchSize),
-					WithConcurrencyControl[string, string](cc),
+					WithMaxBatchSize(batchSize),
+					WithConcurrencyControl(cc),
 				)
 				requests = make([]string, actionCount)
 				responses = make([]Response[string], actionCount)

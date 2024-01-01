@@ -13,7 +13,7 @@ var _ = Describe("Option", func() {
 		ctx context.Context
 
 		action  *MockAction[string, string]
-		options []option[string, string]
+		options []option
 		b       *batcher[string, string]
 	)
 
@@ -30,7 +30,7 @@ var _ = Describe("Option", func() {
 		var size int
 		BeforeEach(func() {
 			size = gofakeit.Number(10, 100)
-			options = append(options, WithMaxBatchSize[string, string](size))
+			options = append(options, WithMaxBatchSize(size))
 		})
 
 		It("should set max batch size", func() {
@@ -42,7 +42,7 @@ var _ = Describe("Option", func() {
 		var scheduler Scheduler
 		BeforeEach(func() {
 			scheduler = NewInstantScheduler()
-			options = append(options, WithScheduler[string, string](scheduler))
+			options = append(options, WithScheduler(scheduler))
 		})
 
 		It("should set schedule function", func() {
@@ -54,7 +54,7 @@ var _ = Describe("Option", func() {
 		var cc ConcurrencyControl
 		BeforeEach(func() {
 			cc = NewUnlimitedConcurrencyControl()
-			options = append(options, WithConcurrencyControl[string, string](cc))
+			options = append(options, WithConcurrencyControl(cc))
 		})
 
 		It("should set concurrency control", func() {
@@ -66,7 +66,7 @@ var _ = Describe("Option", func() {
 		var metrics *MetricSet
 		BeforeEach(func() {
 			metrics = NewMetricSet("foo", "bar", nil)
-			options = append(options, WithMetricSet[string, string](metrics))
+			options = append(options, WithMetricSet(metrics))
 		})
 
 		It("should set metric set", func() {
